@@ -14,7 +14,29 @@ permissions:
   contents: write
 
 jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install --upgrade pip pyinstaller
+      - name: Build Windows executable
+        shell: pwsh
+        run: |
+          @'
+          from wad_deobf.cli import main
+          raise SystemExit(main())
+          '@ | Set-Content _launcher.py
+          pyinstaller --onefile --name wad-deobf --paths src _launcher.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: dist/wad-deobf.exe
+
   publish:
+    needs: windows
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,15 +45,19 @@ jobs:
           python-version: "3.13"
       - run: python -m pip install build
       - run: python -m build
-      - name: Publish v0.1.0
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-exe
+          path: release-assets
+      - name: Publish v0.2.0
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view v0.1.0 >/dev/null 2>&1; then
-            echo "v0.1.0 already exists"
+          if gh release view v0.2.0 >/dev/null 2>&1; then
+            echo "v0.2.0 already exists"
             exit 0
           fi
-          gh release create v0.1.0 dist/* \
+          gh release create v0.2.0 dist/* release-assets/wad-deobf.exe \
             --target "$GITHUB_SHA" \
-            --title "WAD-deobf v0.1.0" \
-            --notes "Initial static WAD v1.0.0 deobfuscator release. Includes safe arithmetic normalization, shuffled string-table recovery, custom alphabet decoding, static lookup recovery, readable UTF-8 output, normalized fallback, and CLI tooling."
+            --title "WAD-deobf v0.2.0" \
+            --notes "Adds static WAD VM de-flattening, CFG recovery, symbolic state propagation, entry-state inference, safe alias cleanup, static load/loadstring variable recovery, VM IR CLI output, and a standalone Windows executable."
