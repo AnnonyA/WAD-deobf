@@ -13,6 +13,7 @@ from .semantic_ir import (
     Index,
     Jump,
     Literal,
+    MultiAssign,
     Name,
     Opaque,
     RawExpr,
@@ -101,6 +102,11 @@ def _optimize_block(block: SemanticBlock) -> SemanticBlock:
             else:
                 env.clear()
             continue
+        if isinstance(instruction, MultiAssign):
+            values = tuple(_substitute(value, env) for value in instruction.values)
+            output.append(MultiAssign(instruction.state, instruction.targets, values))
+            env.clear()
+            continue
         if isinstance(instruction, Call):
             output.append(Call(instruction.state, _substitute(instruction.value, env)))
             env.clear()
@@ -133,6 +139,12 @@ def _used_names(program: SemanticProgram) -> set[str]:
                 if isinstance(instruction.target, Index):
                     used |= _expr_names(instruction.target)
                 used |= _expr_names(instruction.value)
+            elif isinstance(instruction, MultiAssign):
+                for target in instruction.targets:
+                    if isinstance(target, Index):
+                        used |= _expr_names(target)
+                for value in instruction.values:
+                    used |= _expr_names(value)
             elif isinstance(instruction, Call):
                 used |= _expr_names(instruction.value)
             elif isinstance(instruction, Branch):
@@ -177,9 +189,15 @@ def stable_names(program: SemanticProgram) -> dict[str, str]:
     seen: set[str] = set()
     for block in program.blocks:
         for instruction in block.instructions:
-            if isinstance(instruction, Assign) and isinstance(instruction.target, Name):
-                name = instruction.target.name
-                if name not in seen:
-                    seen.add(name)
-                    names.append(name)
+            targets: tuple[Expr, ...]
+            if isinstance(instruction, Assign):
+                targets = (instruction.target,)
+            elif isinstance(instruction, MultiAssign):
+                targets = instruction.targets
+            else:
+                continue
+            for target in targets:
+                if isinstance(target, Name) and target.name not in seen:
+                    seen.add(target.name)
+                    names.append(target.name)
     return {name: f"v{index}" for index, name in enumerate(names, 1)}
