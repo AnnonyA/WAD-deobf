@@ -138,9 +138,8 @@ def _region_lines(
         lines.append(f"{prefix}end")
         return lines
     if isinstance(region, WhileRegion):
-        lines = _block_effects(program, region.state, names, declared, indent)
         prefix = "    " * indent
-        lines.append(f"{prefix}while {_expr(region.condition, names)} do")
+        lines = [f"{prefix}while {_expr(region.condition, names)} do"]
         lines.extend(_region_lines(program, region.body, names, declared, indent + 1))
         lines.append(f"{prefix}end")
         return lines
@@ -148,10 +147,15 @@ def _region_lines(
 
 
 def _emit_state_machine(program: SemanticProgram, names: dict[str, str]) -> str:
-    lines = [f"local state = {program.entry_state if program.entry_state is not None else 'nil'}", "while state do"]
-    declared = set(names.values())
-    if declared:
-        lines.insert(0, "local " + ", ".join(declared))
+    declared_names = tuple(names.values())
+    declared = set(declared_names)
+    lines: list[str] = []
+    if declared_names:
+        lines.append("local " + ", ".join(declared_names))
+    lines.extend([
+        f"local state = {program.entry_state if program.entry_state is not None else 'nil'}",
+        "while state do",
+    ])
     for index, block in enumerate(program.blocks):
         keyword = "if" if index == 0 else "elseif"
         lines.append(f"    {keyword} state == {block.state} then")
@@ -173,6 +177,11 @@ def emit_structured(program: SemanticProgram, region: Region) -> tuple[str, bool
     names = stable_names(program)
     if isinstance(region, StateMachineRegion):
         return _emit_state_machine(program, names), False
-    declared: set[str] = set()
-    lines = _region_lines(program, region, names, declared, 0)
+
+    declared_names = tuple(names.values())
+    declared = set(declared_names)
+    lines: list[str] = []
+    if declared_names:
+        lines.append("local " + ", ".join(declared_names))
+    lines.extend(_region_lines(program, region, names, declared, 0))
     return ("\n".join(lines) + ("\n" if lines else "")), True
