@@ -92,7 +92,7 @@ def test_recover_refuses_reassigned_payload_variable():
 def test_recover_de_flattens_vm_and_honors_entry_override():
     source = "local function run(s) while s do if s<10 then s=20 else s=nil end end end run(5)"
     result = recover_luau(normalized(source), entry_state=7)
-    assert result.mode == "vm"
+    assert result.mode == "structured-partial"
     assert "local state = 7" in result.source
     assert "if s<10" not in result.source
 

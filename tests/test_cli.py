@@ -34,6 +34,20 @@ def _wad(payload: bytes = b"print(1)") -> str:
     )
 
 
+def _wad_vm() -> str:
+    encoded = base64.b64encode(b"unused").decode("ascii")
+    return (
+        "--[[ v1.0.0 https://wearedevs.net/obfuscator ]] "
+        f"return(function(...)local e={{{_literal(encoded)}}}"
+        "for n,Y in ipairs({{1,1}})do while Y[1]<Y[2]do "
+        "e[Y[1]],e[Y[2]],Y[1],Y[2]=e[Y[2]],e[Y[1]],Y[1]+1,Y[2]-1 end end "
+        "local function n(n)return e[n+(0)]end "
+        f"do local n={{{_alphabet()}}}local Y=string.sub local K=string.char end "
+        "local function run(s) while s do if s<10 then print(\"tick\");s=20 else return end end end "
+        "return run(5) end)(...)"
+    )
+
+
 def _run(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-m", "wad_deobf.cli", *args],
@@ -71,10 +85,33 @@ def test_cli_strings_mode_lists_decoded_bytes(tmp_path: Path):
     assert "[1] hello" in result.stdout
 
 
-def test_cli_accepts_vm_ir_and_entry_flags():
-    args = build_parser().parse_args(["input.lua", "--vm-ir", "--entry", "123"])
-    assert args.vm_ir is True
+def test_cli_accepts_vm_ir_semantic_ir_diagnostics_and_entry_flags():
+    args = build_parser().parse_args(["input.lua", "--ir", "--entry", "123"])
+    assert args.ir is True
     assert args.entry == 123
+    args = build_parser().parse_args(["input.lua", "--diagnostics"])
+    assert args.diagnostics is True
+
+
+def test_cli_emits_semantic_ir(tmp_path: Path):
+    input_path = tmp_path / "vm.lua"
+    input_path.write_text(_wad_vm(), encoding="utf-8")
+    result = _run(str(input_path), "--ir")
+    assert result.returncode == 0
+    assert "entry: 5" in result.stdout
+    assert "state 5:" in result.stdout
+    assert 'call print("tick")' in result.stdout
+    assert "jump 20" in result.stdout
+
+
+def test_cli_emits_semantic_diagnostics(tmp_path: Path):
+    input_path = tmp_path / "vm.lua"
+    input_path.write_text(_wad_vm(), encoding="utf-8")
+    result = _run(str(input_path), "--diagnostics")
+    assert result.returncode == 0
+    assert "states: 2" in result.stdout
+    assert "structured: yes" in result.stdout
+    assert "opaque states: none" in result.stdout
 
 
 def test_cli_rejects_non_wad_input(tmp_path: Path):

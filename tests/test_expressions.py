@@ -28,3 +28,9 @@ def test_eval_int_expr_rejects_non_integral_division():
 def test_fold_int_expressions_folds_parenthesized_numeric_noise():
     source = "local a=(-886631+886632); local b=x+(-649519-(-649520))"
     assert expressions.fold_int_expressions(source) == "local a=1; local b=x+1"
+
+
+def test_fold_int_expressions_preserves_call_parentheses():
+    assert expressions.fold_int_expressions("run(5)") == "run(5)"
+    assert expressions.fold_int_expressions("run(100-95)") == "run(5)"
+    assert expressions.fold_int_expressions("math.random(1+1, 100-1)") == "math.random(2, 99)"

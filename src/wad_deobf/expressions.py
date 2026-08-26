@@ -50,11 +50,23 @@ def _try_fold(match: re.Match[str]) -> str:
         return text
 
 
+def _try_fold_parenthesized(match: re.Match[str]) -> str:
+    text = match.group(0)
+    try:
+        value = str(eval_int_expr(text))
+    except ValueError:
+        return text
+    before = match.string[: match.start()].rstrip()
+    if before and (before[-1].isalnum() or before[-1] in "_.)]"):
+        return f"({value})"
+    return value
+
+
 def fold_int_expressions(source: str) -> str:
     result = source
     inner = re.compile(r"\([^()]*\)")
     while True:
-        updated = inner.sub(_try_fold, result)
+        updated = inner.sub(_try_fold_parenthesized, result)
         if updated == result:
             break
         result = updated
