@@ -90,6 +90,27 @@ def test_dataflow_call_is_a_fact_barrier():
     assert propagated.block_for_state(8).instructions == (Return(8, (Name("cached"),)),)
 
 
+def test_dataflow_call_assignment_is_a_fact_barrier():
+    program = SemanticProgram(
+        5,
+        (
+            SemanticBlock(
+                5,
+                (
+                    Assign(5, Name("cached"), Literal(9)),
+                    Assign(5, Name("result"), CallExpr(Name("mutate"), ())),
+                    Jump(5, 8),
+                ),
+            ),
+            SemanticBlock(8, (Return(8, (Name("cached"),)),)),
+        ),
+    )
+
+    propagated = _propagate(program)
+
+    assert propagated.block_for_state(8).instructions == (Return(8, (Name("cached"),)),)
+
+
 def test_dataflow_multiple_assignment_is_a_fact_barrier():
     program = SemanticProgram(
         13,
