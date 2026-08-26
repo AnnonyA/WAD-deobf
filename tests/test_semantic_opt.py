@@ -4,6 +4,7 @@ from wad_deobf.semantic_ir import (
     Branch,
     Call,
     CallExpr,
+    Index,
     Jump,
     Literal,
     Name,
@@ -107,6 +108,30 @@ def test_optimizer_invalidates_copies_when_the_source_is_reassigned():
     assert optimized.block_for_state(1).instructions == (
         Assign(1, Name("saved"), Name("source")),
         Assign(1, Name("source"), Literal(2)),
+        Return(1, (Name("saved"),)),
+    )
+
+
+def test_optimizer_invalidates_attribute_aliases_after_index_write():
+    program = SemanticProgram(
+        1,
+        (
+            SemanticBlock(
+                1,
+                (
+                    Assign(1, Name("saved"), Attribute(Name("obj"), "field")),
+                    Assign(1, Index(Name("obj"), Literal("field")), Literal(2)),
+                    Return(1, (Name("saved"),)),
+                ),
+            ),
+        ),
+    )
+
+    optimized = optimize_program(program)
+
+    assert optimized.block_for_state(1).instructions == (
+        Assign(1, Name("saved"), Attribute(Name("obj"), "field")),
+        Assign(1, Index(Name("obj"), Literal("field")), Literal(2)),
         Return(1, (Name("saved"),)),
     )
 
