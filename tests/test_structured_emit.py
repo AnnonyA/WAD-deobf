@@ -5,6 +5,7 @@ from wad_deobf.semantic_ir import (
     CallExpr,
     Jump,
     Literal,
+    MultiAssign,
     Name,
     Opaque,
     RawExpr,
@@ -83,6 +84,27 @@ def test_emitter_predeclares_locals_used_after_if_join():
         'end\n'
         'return v1\n'
     )
+
+
+def test_emitter_preserves_multiple_return_assignment():
+    program = SemanticProgram(
+        1,
+        (
+            SemanticBlock(
+                1,
+                (
+                    MultiAssign(1, (Name("left"), Name("right")), (CallExpr(Name("pair"), ()),)),
+                    Jump(1, 2),
+                ),
+            ),
+            SemanticBlock(2, (Return(2, (Name("left"), Name("right"))),)),
+        ),
+    )
+
+    source, complete = emit_structured(program, structure_program(program))
+
+    assert complete is True
+    assert source == "local v1, v2\nv1, v2 = pair()\nreturn v1, v2\n"
 
 
 def test_emitter_keeps_original_names_when_opaque_text_is_present():

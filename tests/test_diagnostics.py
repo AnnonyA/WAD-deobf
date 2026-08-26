@@ -1,8 +1,17 @@
-from wad_deobf.diagnostics import analyze_semantic_program, render_diagnostics
+from wad_deobf.diagnostics import analyze_semantic_program, render_diagnostics, render_semantic_ir
 from wad_deobf.emit import emit_luau
 from wad_deobf.normalize import NormalizedWad
 from wad_deobf.recover import recover_luau
-from wad_deobf.semantic_ir import Jump, Opaque, Return, SemanticBlock, SemanticProgram
+from wad_deobf.semantic_ir import (
+    CallExpr,
+    Jump,
+    MultiAssign,
+    Name,
+    Opaque,
+    Return,
+    SemanticBlock,
+    SemanticProgram,
+)
 from wad_deobf.structure import structure_program
 
 
@@ -23,6 +32,14 @@ def test_recovery_prefers_structured_semantic_output_when_proven():
     assert result.mode == "structured"
     assert result.source == "print(1)\nreturn\n"
     assert emit_luau(result).startswith("-- WAD deobfuscation: structured static recovery\n")
+
+
+def test_recovery_uses_safe_cross_state_facts_before_structuring():
+    source = "local function run(s) while s do if s<10 then value=7;s=20 else return value end end end return run(5)"
+    result = recover_luau(normalized(source))
+
+    assert result.mode == "structured"
+    assert result.source == "return 7\n"
 
 
 def test_recovery_marks_opaque_semantic_output_partial():
@@ -53,3 +70,27 @@ def test_diagnostics_explains_opaque_and_unresolved_states():
     assert report.structured is False
     assert "opaque states: 1" in text
     assert "unresolved targets: 99" in text
+
+
+def test_semantic_ir_renders_multiple_assignment_without_losing_results():
+    program = SemanticProgram(
+        17,
+        (
+            SemanticBlock(
+                17,
+                (
+                    MultiAssign(
+                        17,
+                        (Name("left"), Name("right")),
+                        (CallExpr(Name("pair"), ()),),
+                    ),
+                    Return(17, (Name("left"), Name("right"))),
+                ),
+            ),
+        ),
+    )
+
+    text = render_semantic_ir(program)
+
+    assert "multi-assign left, right = pair()" in text
+    assert "return left, right" in text

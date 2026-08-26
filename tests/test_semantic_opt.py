@@ -7,6 +7,7 @@ from wad_deobf.semantic_ir import (
     Index,
     Jump,
     Literal,
+    MultiAssign,
     Name,
     Opaque,
     Return,
@@ -66,6 +67,26 @@ def test_optimizer_preserves_effectful_and_opaque_operations():
     optimized = optimize_program(program)
     assert optimized.block_for_state(5).instructions[0] == Assign(5, Name("x"), random_call)
     assert any(isinstance(item, Opaque) for item in optimized.block_for_state(5).instructions)
+
+
+def test_optimizer_call_assignment_is_a_fact_barrier():
+    program = SemanticProgram(
+        1,
+        (
+            SemanticBlock(
+                1,
+                (
+                    Assign(1, Name("cached"), Literal(1)),
+                    Assign(1, Name("result"), CallExpr(Name("mutate"), ())),
+                    Return(1, (Name("cached"),)),
+                ),
+            ),
+        ),
+    )
+
+    optimized = optimize_program(program)
+
+    assert optimized.block_for_state(1).instructions[-1] == Return(1, (Name("cached"),))
 
 
 def test_optimizer_never_substitutes_a_name_assignment_target():
@@ -134,6 +155,49 @@ def test_optimizer_invalidates_attribute_aliases_after_index_write():
         Assign(1, Index(Name("obj"), Literal("field")), Literal(2)),
         Return(1, (Name("saved"),)),
     )
+
+
+def test_optimizer_invalidates_facts_across_multiple_assignment():
+    program = SemanticProgram(
+        1,
+        (
+            SemanticBlock(
+                1,
+                (
+                    Assign(1, Name("left"), Literal(1)),
+                    MultiAssign(
+                        1,
+                        (Name("left"), Name("right")),
+                        (CallExpr(Name("pair"), ()),),
+                    ),
+                    Return(1, (Name("left"), Name("right"))),
+                ),
+            ),
+        ),
+    )
+
+    optimized = optimize_program(program)
+    instructions = optimized.block_for_state(1).instructions
+
+    assert any(isinstance(item, MultiAssign) for item in instructions)
+    assert instructions[-1] == Return(1, (Name("left"), Name("right")))
+
+
+def test_stable_names_include_multiple_assignment_targets():
+    program = SemanticProgram(
+        1,
+        (
+            SemanticBlock(
+                1,
+                (
+                    MultiAssign(1, (Name("alpha"), Name("beta")), (CallExpr(Name("pair"), ()),)),
+                    Return(1, (Name("alpha"), Name("beta"))),
+                ),
+            ),
+        ),
+    )
+
+    assert stable_names(program) == {"alpha": "v1", "beta": "v2"}
 
 
 def test_stable_names_are_deterministic_and_ignore_globals():

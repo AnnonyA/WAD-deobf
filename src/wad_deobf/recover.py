@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import re
 
 from .cleanup import resolve_global_aliases
+from .dataflow import propagate_straight_line_facts
 from .lifter import lift_program
 from .normalize import NormalizedWad
 from .semantic_opt import optimize_program
@@ -85,7 +86,9 @@ def recover_luau(normalized: NormalizedWad, entry_state: int | None = None) -> R
 
     if resolved_entry is not None:
         try:
-            semantic = optimize_program(lift_program(program, resolved_entry))
+            lifted = lift_program(program, resolved_entry)
+            propagated = propagate_straight_line_facts(lifted)
+            semantic = optimize_program(propagated)
             region = structure_program(semantic)
             source, complete = emit_structured(semantic, region)
             if complete:

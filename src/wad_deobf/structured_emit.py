@@ -11,6 +11,7 @@ from .semantic_ir import (
     Expr,
     Index,
     Jump,
+    MultiAssign,
     Name,
     Opaque,
     RawExpr,
@@ -68,6 +69,11 @@ def _can_rename(program: SemanticProgram) -> bool:
             if isinstance(instruction, Assign):
                 if _has_raw_expr(instruction.target) or _has_raw_expr(instruction.value):
                     return False
+            elif isinstance(instruction, MultiAssign):
+                if any(_has_raw_expr(target) for target in instruction.targets):
+                    return False
+                if any(_has_raw_expr(value) for value in instruction.values):
+                    return False
             elif isinstance(instruction, Call):
                 if _has_raw_expr(instruction.value):
                     return False
@@ -101,6 +107,10 @@ def _instruction_lines(
                 return [f"{prefix}local {target.name} = {value}"]
             return [f"{prefix}{target.name} = {value}"]
         return [f"{prefix}{emit_expr(target)} = {value}"]
+    if isinstance(instruction, MultiAssign):
+        targets = ", ".join(emit_expr(_rename_expr(target, names)) for target in instruction.targets)
+        values = ", ".join(_expr(value, names) for value in instruction.values)
+        return [f"{prefix}{targets} = {values}"]
     if isinstance(instruction, Call):
         return [f"{prefix}{_expr(instruction.value, names)}"]
     if isinstance(instruction, Opaque):

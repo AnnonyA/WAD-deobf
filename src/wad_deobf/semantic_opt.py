@@ -13,6 +13,7 @@ from .semantic_ir import (
     Index,
     Jump,
     Literal,
+    MultiAssign,
     Name,
     Opaque,
     RawExpr,
@@ -41,6 +42,18 @@ def _substitute(expr: Expr, env: dict[str, Expr], seen: set[str] | None = None) 
             tuple(_substitute(arg, env, seen.copy()) for arg in expr.args),
         )
     return expr
+
+
+def _has_call(expr: Expr) -> bool:
+    if isinstance(expr, CallExpr):
+        return True
+    if isinstance(expr, Attribute):
+        return _has_call(expr.base)
+    if isinstance(expr, Index):
+        return _has_call(expr.base) or _has_call(expr.key)
+    if isinstance(expr, Concat):
+        return any(_has_call(part) for part in expr.parts)
+    return False
 
 
 def _propagatable(expr: Expr) -> bool:
@@ -94,12 +107,20 @@ def _optimize_block(block: SemanticBlock) -> SemanticBlock:
                 target = _substitute(instruction.target, env)
             value = _substitute(instruction.value, env)
             output.append(Assign(instruction.state, target, value))
+            if _has_call(value):
+                env.clear()
+                continue
             if isinstance(target, Name):
                 _invalidate_name(env, target.name)
                 if _propagatable(value):
                     env[target.name] = value
             else:
                 env.clear()
+            continue
+        if isinstance(instruction, MultiAssign):
+            values = tuple(_substitute(value, env) for value in instruction.values)
+            output.append(MultiAssign(instruction.state, instruction.targets, values))
+            env.clear()
             continue
         if isinstance(instruction, Call):
             output.append(Call(instruction.state, _substitute(instruction.value, env)))
@@ -133,6 +154,12 @@ def _used_names(program: SemanticProgram) -> set[str]:
                 if isinstance(instruction.target, Index):
                     used |= _expr_names(instruction.target)
                 used |= _expr_names(instruction.value)
+            elif isinstance(instruction, MultiAssign):
+                for target in instruction.targets:
+                    if isinstance(target, Index):
+                        used |= _expr_names(target)
+                for value in instruction.values:
+                    used |= _expr_names(value)
             elif isinstance(instruction, Call):
                 used |= _expr_names(instruction.value)
             elif isinstance(instruction, Branch):
@@ -177,9 +204,15 @@ def stable_names(program: SemanticProgram) -> dict[str, str]:
     seen: set[str] = set()
     for block in program.blocks:
         for instruction in block.instructions:
-            if isinstance(instruction, Assign) and isinstance(instruction.target, Name):
-                name = instruction.target.name
-                if name not in seen:
-                    seen.add(name)
-                    names.append(name)
+            targets: tuple[Expr, ...]
+            if isinstance(instruction, Assign):
+                targets = (instruction.target,)
+            elif isinstance(instruction, MultiAssign):
+                targets = instruction.targets
+            else:
+                continue
+            for target in targets:
+                if isinstance(target, Name) and target.name not in seen:
+                    seen.add(target.name)
+                    names.append(target.name)
     return {name: f"v{index}" for index, name in enumerate(names, 1)}

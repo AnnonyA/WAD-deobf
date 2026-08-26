@@ -5,6 +5,7 @@ import re
 from .cfg import build_state_graph
 from .ir import VmProgram
 from .lua_expr import parse_expr
+from .patterns import PatternContext, lift_statement as lift_pattern_statement
 from .semantic_ir import (
     Assign,
     Branch,
@@ -136,6 +137,10 @@ def _lift_statement(state: int, state_var: str, statement: str):
 def _lift_block(state: int, state_var: str, source: str) -> SemanticBlock:
     instructions = []
     for statement in _split_top_level(source, ";\n"):
+        patterned = lift_pattern_statement(PatternContext(state, state_var, statement))
+        if patterned is not None:
+            instructions.extend(patterned)
+            continue
         instruction = _lift_statement(state, state_var, statement)
         if instruction is not None:
             instructions.append(instruction)

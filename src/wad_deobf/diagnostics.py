@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .lua_expr import emit_expr
-from .semantic_ir import Assign, Branch, Call, Jump, Opaque, Return, SemanticProgram
+from .semantic_ir import Assign, Branch, Call, Jump, MultiAssign, Opaque, Return, SemanticProgram
 from .structure import Region, StateMachineRegion
 
 
@@ -52,6 +52,10 @@ def render_semantic_ir(program: SemanticProgram) -> str:
         for instruction in block.instructions:
             if isinstance(instruction, Assign):
                 lines.append(f"  assign {emit_expr(instruction.target)} = {emit_expr(instruction.value)}")
+            elif isinstance(instruction, MultiAssign):
+                targets = ", ".join(emit_expr(target) for target in instruction.targets)
+                values = ", ".join(emit_expr(value) for value in instruction.values)
+                lines.append(f"  multi-assign {targets} = {values}")
             elif isinstance(instruction, Call):
                 lines.append(f"  call {emit_expr(instruction.value)}")
             elif isinstance(instruction, Branch):

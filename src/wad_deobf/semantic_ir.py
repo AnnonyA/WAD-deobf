@@ -27,8 +27,25 @@ class Index:
 
 
 @dataclass(frozen=True)
+class BinaryExpr:
+    left: Expr
+    operator: str
+    right: Expr
+
+
+@dataclass(frozen=True)
 class Concat:
     parts: tuple[Expr, ...]
+
+
+@dataclass(frozen=True)
+class TableExpr:
+    items: tuple[Expr, ...]
+
+
+@dataclass(frozen=True)
+class Vararg:
+    pass
 
 
 @dataclass(frozen=True)
@@ -42,7 +59,7 @@ class RawExpr:
     source: str
 
 
-Expr: TypeAlias = Literal | Name | Attribute | Index | Concat | CallExpr | RawExpr
+Expr: TypeAlias = Literal | Name | Attribute | Index | BinaryExpr | Concat | TableExpr | Vararg | CallExpr | RawExpr
 
 
 @dataclass(frozen=True)
@@ -53,6 +70,17 @@ class Assign:
 
     @property
     def targets(self) -> tuple[int, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
+class MultiAssign:
+    state: int
+    targets: tuple[Expr, ...]
+    values: tuple[Expr, ...]
+
+    @property
+    def control_targets(self) -> tuple[int, ...]:
         return ()
 
 
@@ -108,7 +136,7 @@ class Opaque:
         return ()
 
 
-Instruction: TypeAlias = Assign | Call | Branch | Jump | Return | Opaque
+Instruction: TypeAlias = Assign | MultiAssign | Call | Branch | Jump | Return | Opaque
 
 
 @dataclass(frozen=True)
@@ -120,7 +148,10 @@ class SemanticBlock:
     def targets(self) -> tuple[int, ...]:
         if not self.instructions:
             return ()
-        return self.instructions[-1].targets
+        last = self.instructions[-1]
+        if isinstance(last, MultiAssign):
+            return ()
+        return last.targets
 
 
 @dataclass(frozen=True)
