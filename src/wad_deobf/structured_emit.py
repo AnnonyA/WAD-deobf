@@ -13,6 +13,7 @@ from .semantic_ir import (
     Jump,
     Name,
     Opaque,
+    RawExpr,
     Return,
     SemanticProgram,
 )
@@ -43,6 +44,40 @@ def _rename_expr(expr: Expr, names: dict[str, str]) -> Expr:
             tuple(_rename_expr(arg, names) for arg in expr.args),
         )
     return expr
+
+
+def _has_raw_expr(expr: Expr) -> bool:
+    if isinstance(expr, RawExpr):
+        return True
+    if isinstance(expr, Attribute):
+        return _has_raw_expr(expr.base)
+    if isinstance(expr, Index):
+        return _has_raw_expr(expr.base) or _has_raw_expr(expr.key)
+    if isinstance(expr, Concat):
+        return any(_has_raw_expr(part) for part in expr.parts)
+    if isinstance(expr, CallExpr):
+        return _has_raw_expr(expr.callee) or any(_has_raw_expr(arg) for arg in expr.args)
+    return False
+
+
+def _can_rename(program: SemanticProgram) -> bool:
+    for block in program.blocks:
+        for instruction in block.instructions:
+            if isinstance(instruction, Opaque):
+                return False
+            if isinstance(instruction, Assign):
+                if _has_raw_expr(instruction.target) or _has_raw_expr(instruction.value):
+                    return False
+            elif isinstance(instruction, Call):
+                if _has_raw_expr(instruction.value):
+                    return False
+            elif isinstance(instruction, Branch):
+                if _has_raw_expr(instruction.condition):
+                    return False
+            elif isinstance(instruction, Return):
+                if any(_has_raw_expr(value) for value in instruction.values):
+                    return False
+    return True
 
 
 def _expr(expr: Expr, names: dict[str, str]) -> str:
@@ -174,7 +209,8 @@ def _emit_state_machine(program: SemanticProgram, names: dict[str, str]) -> str:
 
 
 def emit_structured(program: SemanticProgram, region: Region) -> tuple[str, bool]:
-    names = stable_names(program)
+    stable = stable_names(program)
+    names = stable if _can_rename(program) else {name: name for name in stable}
     if isinstance(region, StateMachineRegion):
         return _emit_state_machine(program, names), False
 
