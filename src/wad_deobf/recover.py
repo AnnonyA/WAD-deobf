@@ -4,8 +4,12 @@ from dataclasses import dataclass
 import re
 
 from .cleanup import resolve_global_aliases
+from .lifter import lift_program
 from .normalize import NormalizedWad
+from .semantic_opt import optimize_program
 from .strings import _decode_lua_string
+from .structure import structure_program
+from .structured_emit import emit_structured
 from .vm import extract_dispatcher, infer_entry_state
 from .vm_emit import emit_state_machine
 
@@ -72,6 +76,33 @@ def recover_luau(normalized: NormalizedWad, entry_state: int | None = None) -> R
     try:
         program = extract_dispatcher(cleaned_source)
         resolved_entry = entry_state if entry_state is not None else infer_entry_state(cleaned_source, program)
+    except ValueError:
+        return RecoveryResult(
+            mode="normalized",
+            source=normalized.source,
+            reason="WAD VM payload could not be proven statically",
+        )
+
+    if resolved_entry is not None:
+        try:
+            semantic = optimize_program(lift_program(program, resolved_entry))
+            region = structure_program(semantic)
+            source, complete = emit_structured(semantic, region)
+            if complete:
+                return RecoveryResult(
+                    mode="structured",
+                    source=source,
+                    reason="WAD VM recovered into structured static Luau",
+                )
+            return RecoveryResult(
+                mode="structured-partial",
+                source=source,
+                reason="WAD VM lifted semantically; unresolved regions kept as a state machine",
+            )
+        except ValueError:
+            pass
+
+    try:
         lifted = emit_state_machine(program, entry_state=resolved_entry)
     except ValueError:
         return RecoveryResult(
