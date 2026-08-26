@@ -113,7 +113,7 @@ def structure_program(program: SemanticProgram) -> Region:
         true_jump = _simple_jump_target(program, true_state)
         false_jump = _simple_jump_target(program, false_state)
 
-        if true_jump == state and false_state != state:
+        if len(block.instructions) == 1 and true_jump == state and false_state != state:
             consumed.update((state, true_state))
             items.append(WhileRegion(state, last.condition, BlockRegion(true_state), false_state))
             state = false_state
