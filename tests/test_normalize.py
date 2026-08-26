@@ -53,3 +53,9 @@ def test_normalize_quotes_binary_decoded_strings_losslessly():
     source = _source([b"\x00\xff"], 'local value=n(-6)')
     result = normalize.normalize_wad(source)
     assert 'local value="\\000\\255"' in result.source
+
+
+def test_normalize_keeps_valid_utf8_readable():
+    source = _source(["Número".encode("utf-8")], 'local value=n(-6)')
+    result = normalize.normalize_wad(source)
+    assert 'local value="Número"' in result.source
