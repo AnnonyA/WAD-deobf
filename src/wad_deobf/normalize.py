@@ -35,15 +35,31 @@ def _lookup_info(source: str, table_name: str) -> tuple[str, int]:
 
 def _lua_quote(value: bytes) -> str:
     chunks = ['"']
-    for byte in value:
+    index = 0
+    while index < len(value):
+        byte = value[index]
         if byte == 34:
             chunks.append('\\"')
         elif byte == 92:
             chunks.append("\\\\")
         elif 32 <= byte <= 126:
             chunks.append(chr(byte))
+        elif byte >= 128:
+            width = 2 if byte < 224 else 3 if byte < 240 else 4 if byte < 248 else 1
+            chunk = value[index : index + width]
+            try:
+                text = chunk.decode("utf-8")
+            except UnicodeDecodeError:
+                chunks.append(f"\\{byte:03d}")
+            else:
+                if len(chunk) == width and text.isprintable():
+                    chunks.append(text)
+                    index += width - 1
+                else:
+                    chunks.append(f"\\{byte:03d}")
         else:
             chunks.append(f"\\{byte:03d}")
+        index += 1
     chunks.append('"')
     return "".join(chunks)
 
