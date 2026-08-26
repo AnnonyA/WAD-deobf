@@ -73,6 +73,12 @@ def _expr_names(expr: Expr) -> set[str]:
     return set()
 
 
+def _invalidate_name(env: dict[str, Expr], name: str) -> None:
+    stale = [key for key, value in env.items() if key == name or name in _expr_names(value)]
+    for key in stale:
+        env.pop(key, None)
+
+
 def _pure_assignment_value(expr: Expr) -> bool:
     return isinstance(expr, (Literal, Name))
 
@@ -82,13 +88,18 @@ def _optimize_block(block: SemanticBlock) -> SemanticBlock:
     output = []
     for instruction in block.instructions:
         if isinstance(instruction, Assign):
-            target = _substitute(instruction.target, env)
+            if isinstance(instruction.target, Name):
+                target = instruction.target
+            else:
+                target = _substitute(instruction.target, env)
             value = _substitute(instruction.value, env)
             output.append(Assign(instruction.state, target, value))
-            if isinstance(target, Name) and _propagatable(value):
-                env[target.name] = value
-            elif isinstance(target, Name):
-                env.pop(target.name, None)
+            if isinstance(target, Name):
+                _invalidate_name(env, target.name)
+                if _propagatable(value):
+                    env[target.name] = value
+            else:
+                env.clear()
             continue
         if isinstance(instruction, Call):
             output.append(Call(instruction.state, _substitute(instruction.value, env)))
