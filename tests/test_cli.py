@@ -3,6 +3,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from wad_deobf.cli import build_parser
+
 
 ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
@@ -42,24 +44,23 @@ def _run(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_cli_writes_partial_static_output_to_stdout(tmp_path: Path):
+def test_cli_recovers_static_payload_to_stdout(tmp_path: Path):
     input_path = tmp_path / "input.lua"
     input_path.write_text(_wad(), encoding="utf-8")
     result = _run(str(input_path))
     assert result.returncode == 0
-    assert "partial static recovery" in result.stdout
-    assert 'local payload="print(1)"' in result.stdout
+    assert result.stdout == "print(1)\n"
     assert result.stderr == ""
 
 
-def test_cli_writes_output_file(tmp_path: Path):
+def test_cli_writes_recovered_output_file(tmp_path: Path):
     input_path = tmp_path / "input.lua"
     output_path = tmp_path / "out.lua"
     input_path.write_text(_wad(), encoding="utf-8")
     result = _run(str(input_path), "-o", str(output_path))
     assert result.returncode == 0
     assert result.stdout == ""
-    assert output_path.read_text(encoding="utf-8").startswith("-- WAD deobfuscation")
+    assert output_path.read_text(encoding="utf-8") == "print(1)\n"
 
 
 def test_cli_strings_mode_lists_decoded_bytes(tmp_path: Path):
@@ -68,6 +69,12 @@ def test_cli_strings_mode_lists_decoded_bytes(tmp_path: Path):
     result = _run(str(input_path), "--strings")
     assert result.returncode == 0
     assert "[1] hello" in result.stdout
+
+
+def test_cli_accepts_vm_ir_and_entry_flags():
+    args = build_parser().parse_args(["input.lua", "--vm-ir", "--entry", "123"])
+    assert args.vm_ir is True
+    assert args.entry == 123
 
 
 def test_cli_rejects_non_wad_input(tmp_path: Path):
