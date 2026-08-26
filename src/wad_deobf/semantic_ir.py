@@ -27,8 +27,25 @@ class Index:
 
 
 @dataclass(frozen=True)
+class BinaryExpr:
+    left: Expr
+    operator: str
+    right: Expr
+
+
+@dataclass(frozen=True)
 class Concat:
     parts: tuple[Expr, ...]
+
+
+@dataclass(frozen=True)
+class TableExpr:
+    items: tuple[Expr, ...]
+
+
+@dataclass(frozen=True)
+class Vararg:
+    pass
 
 
 @dataclass(frozen=True)
@@ -42,7 +59,7 @@ class RawExpr:
     source: str
 
 
-Expr: TypeAlias = Literal | Name | Attribute | Index | Concat | CallExpr | RawExpr
+Expr: TypeAlias = Literal | Name | Attribute | Index | BinaryExpr | Concat | TableExpr | Vararg | CallExpr | RawExpr
 
 
 @dataclass(frozen=True)
