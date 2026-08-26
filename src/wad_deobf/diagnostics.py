@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .semantic_ir import Opaque, SemanticProgram
+from .lua_expr import emit_expr
+from .semantic_ir import Assign, Branch, Call, Jump, Opaque, Return, SemanticProgram
 from .structure import Region, StateMachineRegion
 
 
@@ -38,4 +39,32 @@ def render_diagnostics(report: DiagnosticReport) -> str:
             else "none"
         ),
     ]
+    return "\n".join(lines) + "\n"
+
+
+def render_semantic_ir(program: SemanticProgram) -> str:
+    lines = [f"entry: {program.entry_state if program.entry_state is not None else 'unknown'}"]
+    for block in program.blocks:
+        lines.append(f"state {block.state}:")
+        if not block.instructions:
+            lines.append("  empty")
+            continue
+        for instruction in block.instructions:
+            if isinstance(instruction, Assign):
+                lines.append(f"  assign {emit_expr(instruction.target)} = {emit_expr(instruction.value)}")
+            elif isinstance(instruction, Call):
+                lines.append(f"  call {emit_expr(instruction.value)}")
+            elif isinstance(instruction, Branch):
+                lines.append(
+                    f"  branch {emit_expr(instruction.condition)} ? {instruction.true_state} : {instruction.false_state}"
+                )
+            elif isinstance(instruction, Jump):
+                lines.append(f"  jump {instruction.target}")
+            elif isinstance(instruction, Return):
+                values = ", ".join(emit_expr(value) for value in instruction.values)
+                lines.append(f"  return{(' ' + values) if values else ''}")
+            elif isinstance(instruction, Opaque):
+                lines.append(f"  opaque {instruction.source}")
+    if program.unresolved_targets:
+        lines.append("unresolved: " + ", ".join(str(state) for state in program.unresolved_targets))
     return "\n".join(lines) + "\n"
