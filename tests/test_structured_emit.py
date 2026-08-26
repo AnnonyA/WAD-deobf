@@ -27,7 +27,7 @@ def test_emitter_outputs_readable_straight_line_luau():
     source, complete = emit_structured(program, structure_program(program))
 
     assert complete is True
-    assert source == 'local v1 = 7\nprint(v1)\nreturn v1\n'
+    assert source == 'local v1\nv1 = 7\nprint(v1)\nreturn v1\n'
     assert "state" not in source
 
 
@@ -59,18 +59,54 @@ def test_emitter_outputs_if_else_and_while_regions():
     assert loop_source == 'while running do\n    tick()\nend\nreturn\n'
 
 
-def test_emitter_marks_state_machine_fallback_partial():
+def test_emitter_predeclares_locals_used_after_if_join():
     program = SemanticProgram(
         1,
         (
-            SemanticBlock(1, (Opaque(1, "mystery()"), Jump(1, 2))),
-            SemanticBlock(2, (Return(2, ()),)),
+            SemanticBlock(1, (Branch(1, Name("ok"), 2, 3),)),
+            SemanticBlock(2, (Assign(2, Name("result"), Literal(1)), Jump(2, 4))),
+            SemanticBlock(3, (Assign(3, Name("result"), Literal(2)), Jump(3, 4))),
+            SemanticBlock(4, (Return(4, (Name("result"),)),)),
         ),
     )
 
     source, complete = emit_structured(program, structure_program(program))
 
+    assert complete is True
+    assert source == (
+        'local v1\n'
+        'if ok then\n'
+        '    v1 = 1\n'
+        'else\n'
+        '    v1 = 2\n'
+        'end\n'
+        'return v1\n'
+    )
+
+
+def test_emitter_marks_state_machine_fallback_partial_and_deterministic():
+    program = SemanticProgram(
+        1,
+        (
+            SemanticBlock(
+                1,
+                (
+                    Assign(1, Name("alpha"), Literal(1)),
+                    Assign(1, Name("beta"), Literal(2)),
+                    Opaque(1, "mystery()"),
+                    Jump(1, 2),
+                ),
+            ),
+            SemanticBlock(2, (Return(2, (Name("alpha"), Name("beta"))),)),
+        ),
+    )
+
+    source, complete = emit_structured(program, structure_program(program))
+    repeated, repeated_complete = emit_structured(program, structure_program(program))
+
     assert complete is False
-    assert "local state = 1" in source
+    assert repeated_complete is False
+    assert source == repeated
+    assert source.startswith("local v1, v2\nlocal state = 1\n")
     assert "mystery()" in source
     assert "state = 2" in source
