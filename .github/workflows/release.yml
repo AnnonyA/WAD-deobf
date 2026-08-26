@@ -49,15 +49,15 @@ jobs:
         with:
           name: windows-exe
           path: release-assets
-      - name: Publish v0.2.0
+      - name: Publish v0.3.0
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view v0.2.0 >/dev/null 2>&1; then
-            echo "v0.2.0 already exists"
+          if gh release view v0.3.0 >/dev/null 2>&1; then
+            echo "v0.3.0 already exists"
             exit 0
           fi
-          gh release create v0.2.0 dist/* release-assets/wad-deobf.exe \
+          gh release create v0.3.0 dist/* release-assets/wad-deobf.exe \
             --target "$GITHUB_SHA" \
-            --title "WAD-deobf v0.2.0" \
-            --notes "Adds static WAD VM de-flattening, CFG recovery, symbolic state propagation, entry-state inference, safe alias cleanup, static load/loadstring variable recovery, VM IR CLI output, and a standalone Windows executable."
+            --title "WAD-deobf v0.3.0" \
+            --notes "Adds semantic VM lifting, conservative constant/copy propagation and dead-code elimination, structured straight-line/if/while recovery, stable temporary naming, semantic IR and diagnostics CLI modes, safer local-scope handling, and call-safe arithmetic folding. Unknown or irreducible forms still fail closed to explicit state-machine or normalized output."
