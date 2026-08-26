@@ -4,6 +4,7 @@ from __future__ import annotations
 def _find_function_end(src: str, start: int):
     i = start
     depth = 0
+    word = ''
     openers = {'function', 'if', 'for', 'while', 'do'}
     while i < len(src):
         c = src[i]
@@ -34,15 +35,10 @@ def _find_function_end(src: str, start: int):
 def unwrap_generated_iife(source: str):
     stripped = source.strip()
     prefix = 'return(function(...)'
+    suffixes = ('end)(...);', 'end)(...)')
     if not stripped.startswith(prefix):
         return source, 0
-    fn_start = stripped.find('function')
-    match = _find_function_end(stripped, fn_start)
-    if not match:
-        return source, 0
-    end_start, end_end = match
-    tail = stripped[end_end:].strip()
-    if tail not in {')(... )', ')(...)', ')(...);', '(...)', '(...);'}:
-        return source, 0
-    body_start = stripped.find(')', fn_start) + 1
-    return stripped[body_start:end_start].strip(), 1
+    for suffix in suffixes:
+        if stripped.endswith(suffix):
+            return stripped[len(prefix):-len(suffix)].strip(), 1
+    return source, 0

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 
+from .lex import mask_non_code
 from .literals import decode_lua_string, encode_lua_string
 from .models import PassResult
 from .numbers import eval_numeric
@@ -33,11 +34,38 @@ def _balanced(src: str, start: int, open_ch: str = '{', close_ch: str = '}'):
 
 
 def _lookup(source: str):
-    pairs = re.findall(r'\[\s*(["\'])(.)\1\s*\]\s*=\s*(\d+)', source)
-    mapping = {ch: int(value) for _, ch, value in pairs if int(value) < 64}
-    if len(mapping) != 64 or set(mapping.values()) != set(range(64)):
-        return None
-    return mapping
+    string_token = r'(?:"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\')'
+    expected_keys = set('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/')
+    table_re = re.compile(r'\blocal\s+[A-Za-z_]\w*\s*=\s*\{')
+
+    for table_match in table_re.finditer(source):
+        open_pos = source.find('{', table_match.start())
+        close_pos = _balanced(source, open_pos)
+        if not close_pos:
+            continue
+        body = source[open_pos + 1:close_pos - 1]
+        mapping = {}
+
+        bracket_re = re.compile(r'\[\s*(' + string_token + r')\s*\]\s*=\s*([^,;}\n]+)')
+        for item in bracket_re.finditer(body):
+            try:
+                key = decode_lua_string(item.group(1))
+            except ValueError:
+                continue
+            value = eval_numeric(item.group(2).strip())
+            if len(key) == 1 and value is not None and float(value).is_integer():
+                mapping[key] = int(value)
+
+        bare_re = re.compile(r'(?:^|[,;])\s*([A-Za-z_]\w*)\s*=\s*([^,;}\n]+)')
+        for item in bare_re.finditer(body):
+            key = item.group(1)
+            value = eval_numeric(item.group(2).strip())
+            if len(key) == 1 and value is not None and float(value).is_integer():
+                mapping[key] = int(value)
+
+        if set(mapping) == expected_keys and set(mapping.values()) == set(range(64)):
+            return mapping
+    return None
 
 
 def _decode(value: str, lookup: dict[str, int]):
@@ -121,6 +149,27 @@ def _wrapper(source: str, arr_name: str):
     return None
 
 
+def _numeric_call_spans(source: str, func: str):
+    masked = mask_non_code(source)
+    head = re.compile(r'\b' + re.escape(func) + r'\s*\(')
+    for match in head.finditer(masked):
+        open_pos = masked.find('(', match.start(), match.end())
+        depth = 1
+        i = open_pos + 1
+        comma = False
+        while i < len(masked) and depth:
+            ch = masked[i]
+            if ch == '(':
+                depth += 1
+            elif ch == ')':
+                depth -= 1
+            elif ch == ',' and depth == 1:
+                comma = True
+            i += 1
+        if depth == 0 and not comma:
+            yield match.start(), i, source[open_pos + 1:i - 1].strip()
+
+
 def recover_constant_arrays(source: str) -> PassResult:
     lookup = _lookup(source)
     if not lookup:
@@ -141,16 +190,17 @@ def recover_constant_arrays(source: str) -> PassResult:
     wrap = _wrapper(out, name)
     if wrap:
         func, offset = wrap
-        call = re.compile(r'\b' + re.escape(func) + r'\s*\(\s*([^()]+?)\s*\)')
-        def repl(m):
-            nonlocal changes
-            value = eval_numeric(m.group(1))
-            if value is None or not float(value).is_integer(): return m.group(0)
+        replacements = []
+        for start, end, arg in _numeric_call_spans(out, func):
+            value = eval_numeric(arg)
+            if value is None or not float(value).is_integer():
+                continue
             idx = int(value) + offset
-            if not 1 <= idx <= len(decoded): return m.group(0)
-            changes += 1
-            return encode_lua_string(decoded[idx - 1])
-        out = call.sub(repl, out)
+            if 1 <= idx <= len(decoded):
+                replacements.append((start, end, encode_lua_string(decoded[idx - 1])))
+        for start, end, value in reversed(replacements):
+            out = out[:start] + value + out[end:]
+        changes += len(replacements)
 
     direct = re.compile(r'\b' + re.escape(name) + r'\s*\[\s*([^\[\]]+?)\s*\]')
     def direct_repl(m):

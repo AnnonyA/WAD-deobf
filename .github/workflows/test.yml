@@ -32,9 +32,18 @@ jobs:
           python - <<'PY'
           import json
           from pathlib import Path
+
           report = json.loads(Path('samples/report.json').read_text())
-          assert report['total_changes'] > 0
-          assert Path('samples/deobfuscated.lua').stat().st_size > 0
+          passes = {entry['pass'] for entry in report['passes'] if entry['changes'] > 0}
+          original = Path('samples/prometheus-medium.lua').read_text()
+          recovered = Path('samples/deobfuscated.lua').read_text()
+
+          assert report['total_changes'] >= 399
+          assert {'unwrap_iife', 'fold_numbers', 'constant_array'} <= passes
+          assert report['vm']['detected'] is True
+          assert report['vm']['comparisons'] >= 50
+          assert '"print"' in recovered
+          assert len(recovered) < len(original)
           PY
       - name: Store deterministic fixture on branch
         if: github.event_name == 'push' && github.actor != 'github-actions[bot]'

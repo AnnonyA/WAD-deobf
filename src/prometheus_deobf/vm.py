@@ -15,40 +15,55 @@ class VmReport:
     states: int = 0
 
 
-def _find_while(source: str):
+def _while_candidates(source: str):
     masked = mask_non_code(source)
-    m = re.search(r'\bwhile\s+([A-Za-z_]\w*)\s+do\b', masked)
-    if not m:
-        return None
-    pos = m.group(1)
-    body_start = m.end()
+    head_re = re.compile(r'\bwhile\s+([A-Za-z_]\w*)\s+do\b')
     token_re = re.compile(r'\b(function|if|for|while|do|repeat|end|until)\b')
-    stack = [('loop', False)]
-    for t in token_re.finditer(masked, body_start):
-        w = t.group(1)
-        if w in {'for', 'while'}:
-            stack.append(('pending_loop', False))
-        elif w == 'do':
-            if stack and stack[-1][0] == 'pending_loop':
-                stack[-1] = ('loop', False)
-            else:
-                stack.append(('do', False))
-        elif w in {'function', 'if'}:
-            stack.append((w, False))
-        elif w == 'repeat':
-            stack.append(('repeat', False))
-        elif w == 'until':
-            if stack and stack[-1][0] == 'repeat':
+    for m in head_re.finditer(masked):
+        pos = m.group(1)
+        body_start = m.end()
+        stack = [('loop', False)]
+        for t in token_re.finditer(masked, body_start):
+            w = t.group(1)
+            if w in {'for', 'while'}:
+                stack.append(('pending_loop', False))
+            elif w == 'do':
+                if stack and stack[-1][0] == 'pending_loop':
+                    stack[-1] = ('loop', False)
+                else:
+                    stack.append(('do', False))
+            elif w in {'function', 'if'}:
+                stack.append((w, False))
+            elif w == 'repeat':
+                stack.append(('repeat', False))
+            elif w == 'until':
+                if stack and stack[-1][0] == 'repeat':
+                    stack.pop()
+            elif w == 'end':
+                if not stack:
+                    continue
+                if stack[-1][0] == 'repeat':
+                    continue
                 stack.pop()
-        elif w == 'end':
-            if not stack:
-                continue
-            if stack[-1][0] == 'repeat':
-                continue
-            stack.pop()
-            if not stack:
-                return pos, m.start(), body_start, t.start(), t.end()
-    return None
+                if not stack:
+                    yield pos, m.start(), body_start, t.start(), t.end()
+                    break
+
+
+def _find_while(source: str):
+    best = None
+    best_score = -1
+    masked = mask_non_code(source)
+    for candidate in _while_candidates(source):
+        pos, _, body_start, body_end, _ = candidate
+        body = masked[body_start:body_end]
+        comparisons = len(re.findall(r'\b' + re.escape(pos) + r'\s*(?:<=|>=|==|~=|<|>)\s*-?\d+', body))
+        assignments = len(re.findall(r'\b' + re.escape(pos) + r'\s*=\s*(?:nil|-?\d+)\b', body))
+        score = comparisons * 4 + assignments
+        if score > best_score:
+            best = candidate
+            best_score = score
+    return best
 
 
 def _simple_condition(cond: str, pos: str, state: int):
@@ -145,6 +160,9 @@ def lift_linear_dispatcher(source: str) -> PassResult:
     if not assigns:
         return PassResult(source, details={'unresolved': True, 'reason': 'initial-state-not-found'})
     initial = assigns[-1]
+    between = mask_non_code(before[initial.end():])
+    if re.search(r'\bfunction\b', between):
+        return PassResult(source, details={'unresolved': True, 'reason': 'initial-state-not-found'})
     state = int(initial.group(1))
     dispatcher = source[body_start:body_end]
     emitted = []
