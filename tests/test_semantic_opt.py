@@ -69,6 +69,26 @@ def test_optimizer_preserves_effectful_and_opaque_operations():
     assert any(isinstance(item, Opaque) for item in optimized.block_for_state(5).instructions)
 
 
+def test_optimizer_call_assignment_is_a_fact_barrier():
+    program = SemanticProgram(
+        1,
+        (
+            SemanticBlock(
+                1,
+                (
+                    Assign(1, Name("cached"), Literal(1)),
+                    Assign(1, Name("result"), CallExpr(Name("mutate"), ())),
+                    Return(1, (Name("cached"),)),
+                ),
+            ),
+        ),
+    )
+
+    optimized = optimize_program(program)
+
+    assert optimized.block_for_state(1).instructions[-1] == Return(1, (Name("cached"),))
+
+
 def test_optimizer_never_substitutes_a_name_assignment_target():
     program = SemanticProgram(
         1,
