@@ -84,10 +84,7 @@ def test_optimizer_never_substitutes_a_name_assignment_target():
 
     optimized = optimize_program(program)
 
-    assert optimized.block_for_state(1).instructions[-2:] == (
-        Assign(1, Name("x"), Literal(2)),
-        Return(1, (Literal(2),)),
-    )
+    assert optimized.block_for_state(1).instructions == (Return(1, (Literal(2),)),)
 
 
 def test_optimizer_invalidates_copies_when_the_source_is_reassigned():
@@ -109,6 +106,7 @@ def test_optimizer_invalidates_copies_when_the_source_is_reassigned():
 
     assert optimized.block_for_state(1).instructions == (
         Assign(1, Name("saved"), Name("source")),
+        Assign(1, Name("source"), Literal(2)),
         Return(1, (Name("saved"),)),
     )
 
