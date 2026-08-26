@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 import sys
 
+from .dataflow import propagate_straight_line_facts
 from .diagnostics import analyze_semantic_program, render_diagnostics, render_semantic_ir
 from .emit import emit_luau
 from .lifter import lift_program
@@ -43,7 +44,8 @@ def _semantic_view(source: str, entry_override: int | None):
     entry = entry_override if entry_override is not None else infer_entry_state(source, vm_program)
     if entry is None:
         raise ValueError("semantic recovery requires a known entry state")
-    semantic = optimize_program(lift_program(vm_program, entry))
+    lifted = lift_program(vm_program, entry)
+    semantic = optimize_program(propagate_straight_line_facts(lifted))
     return semantic, structure_program(semantic)
 
 
