@@ -7,6 +7,8 @@ import sys
 from .emit import emit_luau
 from .normalize import normalize_wad
 from .recover import recover_luau
+from .vm import extract_dispatcher, infer_entry_state
+from .vm_emit import emit_state_machine
 
 
 def _render_bytes(value: bytes) -> str:
@@ -25,6 +27,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-o", "--output", type=Path, help="write output to a file")
     parser.add_argument("--strings", action="store_true", help="print the decoded WAD string table")
     parser.add_argument("--normalized", action="store_true", help="emit normalized WAD source without payload recovery")
+    parser.add_argument("--vm-ir", action="store_true", help="emit the de-flattened WAD VM state machine")
+    parser.add_argument("--entry", type=int, help="override the WAD VM entry state")
     return parser
 
 
@@ -37,8 +41,12 @@ def main(argv: list[str] | None = None) -> int:
             output = "".join(f"[{index}] {_render_bytes(value)}\n" for index, value in enumerate(normalized.decoded_strings, 1))
         elif args.normalized:
             output = normalized.source.rstrip() + "\n"
+        elif args.vm_ir:
+            program = extract_dispatcher(normalized.source)
+            entry = args.entry if args.entry is not None else infer_entry_state(normalized.source, program)
+            output = emit_state_machine(program, entry_state=entry)
         else:
-            output = emit_luau(recover_luau(normalized))
+            output = emit_luau(recover_luau(normalized, entry_state=args.entry))
     except (OSError, UnicodeError, ValueError) as exc:
         print(f"wad-deobf: {exc}", file=sys.stderr)
         return 2
