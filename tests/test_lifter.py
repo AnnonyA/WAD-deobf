@@ -81,7 +81,7 @@ def test_lifter_recovers_multiple_call_result_assignment():
     program = VmProgram(
         state_var="cursor",
         blocks=(
-            VmBlock(None, 100, "local left,right=pair(); cursor=200", (200,)),
+            VmBlock(None, 100, "left,right=pair(); cursor=200", (200,)),
             VmBlock(100, None, "return left,right", (), terminal=True),
         ),
     )
@@ -92,6 +92,24 @@ def test_lifter_recovers_multiple_call_result_assignment():
     assert instruction.__class__.__name__ == "MultiAssign"
     assert instruction.targets == (Name("left"), Name("right"))
     assert instruction.values == (CallExpr(Name("pair"), ()),)
+    assert lifted.block_for_state(41).instructions[-1] == Jump(41, 200)
+
+
+def test_lifter_preserves_local_multiple_assignment_as_opaque():
+    program = VmProgram(
+        state_var="cursor",
+        blocks=(
+            VmBlock(None, 100, "local first,second=pair(); cursor=200", (200,)),
+            VmBlock(100, None, "return", (), terminal=True),
+        ),
+    )
+
+    lifted = lift_program(program, entry_state=41)
+
+    assert lifted.block_for_state(41).instructions[0] == Opaque(
+        41,
+        "local first,second=pair()",
+    )
     assert lifted.block_for_state(41).instructions[-1] == Jump(41, 200)
 
 
