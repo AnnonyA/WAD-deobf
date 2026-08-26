@@ -105,7 +105,7 @@ def _lift_multi_assignment(
     lhs = text[:assignment].strip()
     rhs = text[assignment + 1:].strip()
     if lhs.startswith("local "):
-        lhs = lhs[6:].strip()
+        return None
     target_parts = _split_top_level(lhs, ",")
     if len(target_parts) < 2 or any(not part for part in target_parts):
         return None
