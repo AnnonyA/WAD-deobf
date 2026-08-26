@@ -1,0 +1,64 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -e . pytest
+      - run: python -m pytest -q
+      - name: Generate pinned Prometheus fixture
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.1
+          git clone https://github.com/wcrddn/Prometheus.git /tmp/Prometheus
+          git -C /tmp/Prometheus checkout a4b00a2395e9982298fe76c7b055c755df25e6e9
+          lua5.1 /tmp/Prometheus/cli.lua --config "$GITHUB_WORKSPACE/samples/prometheus-config.lua" --out "$GITHUB_WORKSPACE/samples/prometheus-medium.lua" "$GITHUB_WORKSPACE/samples/original.lua"
+      - name: Deobfuscate fixture
+        run: |
+          prometheus-deobf samples/prometheus-medium.lua -o samples/deobfuscated.lua --report samples/report.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path('samples/report.json').read_text())
+          passes = {entry['pass'] for entry in report['passes'] if entry['changes'] > 0}
+          original = Path('samples/prometheus-medium.lua').read_text()
+          recovered = Path('samples/deobfuscated.lua').read_text()
+
+          assert report['total_changes'] >= 399
+          assert {'unwrap_iife', 'fold_numbers', 'constant_array'} <= passes
+          assert report['vm']['detected'] is True
+          assert report['vm']['comparisons'] >= 50
+          assert '"print"' in recovered
+          assert len(recovered) < len(original)
+          PY
+      - name: Store deterministic fixture on branch
+        if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add samples/prometheus-medium.lua
+          if ! git diff --cached --quiet; then
+            git commit -m "test: add deterministic Prometheus fixture [skip ci]"
+            git push
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prometheus-deobf-fixture
+          path: |
+            samples/prometheus-medium.lua
+            samples/deobfuscated.lua
+            samples/report.json

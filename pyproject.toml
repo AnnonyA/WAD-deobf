@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wad-deobf"
-version = "0.1.0"
-description = "Static deobfuscator for WeAreDevs WAD Lua/Luau output"
+version = "0.2.0"
+description = "Static deobfuscation tools for Prometheus and WeAreDevs WAD Lua/Luau output"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
@@ -14,6 +14,7 @@ dependencies = []
 
 [project.scripts]
 wad-deobf = "wad_deobf.cli:main"
+prometheus-deobf = "prometheus_deobf.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
