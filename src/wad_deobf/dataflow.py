@@ -47,6 +47,18 @@ def _substitute(expr: Expr, env: FactEnv, seen: set[str] | None = None) -> Expr:
     return expr
 
 
+def _has_call(expr: Expr) -> bool:
+    if isinstance(expr, CallExpr):
+        return True
+    if isinstance(expr, Attribute):
+        return _has_call(expr.base)
+    if isinstance(expr, Index):
+        return _has_call(expr.base) or _has_call(expr.key)
+    if isinstance(expr, Concat):
+        return any(_has_call(part) for part in expr.parts)
+    return False
+
+
 def _invalidate(env: FactEnv, name: str) -> None:
     stale = [
         key
@@ -65,6 +77,9 @@ def _process_block(block: SemanticBlock, incoming: FactEnv) -> tuple[SemanticBlo
             if isinstance(instruction.target, Name):
                 value = _substitute(instruction.value, env)
                 output.append(Assign(instruction.state, instruction.target, value))
+                if _has_call(value):
+                    env.clear()
+                    continue
                 _invalidate(env, instruction.target.name)
                 if isinstance(value, (Literal, Name)):
                     env[instruction.target.name] = value
