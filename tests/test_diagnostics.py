@@ -34,6 +34,14 @@ def test_recovery_prefers_structured_semantic_output_when_proven():
     assert emit_luau(result).startswith("-- WAD deobfuscation: structured static recovery\n")
 
 
+def test_recovery_uses_safe_cross_state_facts_before_structuring():
+    source = "local function run(s) while s do if s<10 then value=7;s=20 else return value end end end return run(5)"
+    result = recover_luau(normalized(source))
+
+    assert result.mode == "structured"
+    assert result.source == "return 7\n"
+
+
 def test_recovery_marks_opaque_semantic_output_partial():
     source = "local function run(s) while s do if s<10 then mystery + 1;s=20 else return end end end return run(5)"
     result = recover_luau(normalized(source))
