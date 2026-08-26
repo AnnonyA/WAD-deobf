@@ -44,6 +44,18 @@ def _substitute(expr: Expr, env: dict[str, Expr], seen: set[str] | None = None) 
     return expr
 
 
+def _has_call(expr: Expr) -> bool:
+    if isinstance(expr, CallExpr):
+        return True
+    if isinstance(expr, Attribute):
+        return _has_call(expr.base)
+    if isinstance(expr, Index):
+        return _has_call(expr.base) or _has_call(expr.key)
+    if isinstance(expr, Concat):
+        return any(_has_call(part) for part in expr.parts)
+    return False
+
+
 def _propagatable(expr: Expr) -> bool:
     if isinstance(expr, (Literal, Name)):
         return True
@@ -95,6 +107,9 @@ def _optimize_block(block: SemanticBlock) -> SemanticBlock:
                 target = _substitute(instruction.target, env)
             value = _substitute(instruction.value, env)
             output.append(Assign(instruction.state, target, value))
+            if _has_call(value):
+                env.clear()
+                continue
             if isinstance(target, Name):
                 _invalidate_name(env, target.name)
                 if _propagatable(value):
