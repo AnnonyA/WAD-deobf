@@ -88,6 +88,18 @@ def test_structure_refuses_loop_when_head_has_effects_before_branch():
     assert structure_program(program) == StateMachineRegion((1, 2, 3))
 
 
+def test_structure_refuses_loop_when_branch_targets_same_body():
+    program = SemanticProgram(
+        1,
+        (
+            SemanticBlock(1, (Branch(1, Name("running"), 2, 2),)),
+            SemanticBlock(2, (Call(2, CallExpr(Name("tick"), ())), Jump(2, 1))),
+        ),
+    )
+
+    assert structure_program(program) == StateMachineRegion((1, 2))
+
+
 def test_structure_falls_back_for_opaque_or_unresolved_control_flow():
     opaque = SemanticProgram(
         1,
