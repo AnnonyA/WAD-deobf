@@ -1,0 +1,36 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "pyproject.toml"
+      - "README.md"
+      - ".github/workflows/release.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install build
+      - run: python -m build
+      - name: Publish v0.1.0
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view v0.1.0 >/dev/null 2>&1; then
+            echo "v0.1.0 already exists"
+            exit 0
+          fi
+          gh release create v0.1.0 dist/* \
+            --target "$GITHUB_SHA" \
+            --title "WAD-deobf v0.1.0" \
+            --notes "Initial static WAD v1.0.0 deobfuscator release. Includes safe arithmetic normalization, shuffled string-table recovery, custom alphabet decoding, static lookup recovery, readable UTF-8 output, normalized fallback, and CLI tooling."
