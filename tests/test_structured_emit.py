@@ -7,6 +7,7 @@ from wad_deobf.semantic_ir import (
     Literal,
     Name,
     Opaque,
+    RawExpr,
     Return,
     SemanticBlock,
     SemanticProgram,
@@ -84,7 +85,7 @@ def test_emitter_predeclares_locals_used_after_if_join():
     )
 
 
-def test_emitter_marks_state_machine_fallback_partial_and_deterministic():
+def test_emitter_keeps_original_names_when_opaque_text_is_present():
     program = SemanticProgram(
         1,
         (
@@ -93,7 +94,7 @@ def test_emitter_marks_state_machine_fallback_partial_and_deterministic():
                 (
                     Assign(1, Name("alpha"), Literal(1)),
                     Assign(1, Name("beta"), Literal(2)),
-                    Opaque(1, "mystery()"),
+                    Opaque(1, "mystery(alpha)"),
                     Jump(1, 2),
                 ),
             ),
@@ -107,6 +108,29 @@ def test_emitter_marks_state_machine_fallback_partial_and_deterministic():
     assert complete is False
     assert repeated_complete is False
     assert source == repeated
-    assert source.startswith("local v1, v2\nlocal state = 1\n")
-    assert "mystery()" in source
+    assert source.startswith("local alpha, beta\nlocal state = 1\n")
+    assert "mystery(alpha)" in source
+    assert "v1" not in source
+    assert "v2" not in source
     assert "state = 2" in source
+
+
+def test_emitter_keeps_original_names_when_raw_expressions_are_present():
+    program = SemanticProgram(
+        1,
+        (
+            SemanticBlock(
+                1,
+                (
+                    Assign(1, Name("x"), Literal(1)),
+                    Assign(1, Name("y"), RawExpr("x + 1")),
+                    Return(1, (Name("y"),)),
+                ),
+            ),
+        ),
+    )
+
+    source, complete = emit_structured(program, structure_program(program))
+
+    assert complete is True
+    assert source == "local x, y\nx = 1\ny = x + 1\nreturn y\n"
