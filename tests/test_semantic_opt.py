@@ -67,6 +67,52 @@ def test_optimizer_preserves_effectful_and_opaque_operations():
     assert any(isinstance(item, Opaque) for item in optimized.block_for_state(5).instructions)
 
 
+def test_optimizer_never_substitutes_a_name_assignment_target():
+    program = SemanticProgram(
+        1,
+        (
+            SemanticBlock(
+                1,
+                (
+                    Assign(1, Name("x"), Literal(1)),
+                    Assign(1, Name("x"), Literal(2)),
+                    Return(1, (Name("x"),)),
+                ),
+            ),
+        ),
+    )
+
+    optimized = optimize_program(program)
+
+    assert optimized.block_for_state(1).instructions[-2:] == (
+        Assign(1, Name("x"), Literal(2)),
+        Return(1, (Literal(2),)),
+    )
+
+
+def test_optimizer_invalidates_copies_when_the_source_is_reassigned():
+    program = SemanticProgram(
+        1,
+        (
+            SemanticBlock(
+                1,
+                (
+                    Assign(1, Name("saved"), Name("source")),
+                    Assign(1, Name("source"), Literal(2)),
+                    Return(1, (Name("saved"),)),
+                ),
+            ),
+        ),
+    )
+
+    optimized = optimize_program(program)
+
+    assert optimized.block_for_state(1).instructions == (
+        Assign(1, Name("saved"), Name("source")),
+        Return(1, (Name("saved"),)),
+    )
+
+
 def test_stable_names_are_deterministic_and_ignore_globals():
     program = SemanticProgram(
         1,
