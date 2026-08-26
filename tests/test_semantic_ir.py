@@ -2,6 +2,7 @@ from wad_deobf.lua_expr import emit_expr, parse_expr
 from wad_deobf.semantic_ir import (
     Assign,
     Attribute,
+    BinaryExpr,
     Branch,
     Call,
     CallExpr,
@@ -15,6 +16,8 @@ from wad_deobf.semantic_ir import (
     Return,
     SemanticBlock,
     SemanticProgram,
+    TableExpr,
+    Vararg,
 )
 
 
@@ -30,15 +33,46 @@ def test_parse_expr_recovers_semantic_shapes():
     )
 
 
+def test_parse_expr_recovers_binary_precedence():
+    assert parse_expr("p^a") == BinaryExpr(Name("p"), "^", Name("a"))
+    assert parse_expr("f+K") == BinaryExpr(Name("f"), "+", Name("K"))
+    assert parse_expr("u%Q") == BinaryExpr(Name("u"), "%", Name("Q"))
+    assert parse_expr("g==t") == BinaryExpr(Name("g"), "==", Name("t"))
+    assert parse_expr("O<S") == BinaryExpr(Name("O"), "<", Name("S"))
+    assert parse_expr("a+b*c") == BinaryExpr(
+        Name("a"),
+        "+",
+        BinaryExpr(Name("b"), "*", Name("c")),
+    )
+    assert parse_expr("a^b^c") == BinaryExpr(
+        Name("a"),
+        "^",
+        BinaryExpr(Name("b"), "^", Name("c")),
+    )
+
+
+def test_parse_expr_recovers_positional_tables_and_varargs():
+    assert parse_expr("...") == Vararg()
+    assert parse_expr("{}") == TableExpr(())
+    assert parse_expr("{a,b;...}") == TableExpr((Name("a"), Name("b"), Vararg()))
+    assert parse_expr("G(l,{i},y,x)") == CallExpr(
+        Name("G"),
+        (Name("l"), TableExpr((Name("i"),)), Name("y"), Name("x")),
+    )
+
+
 def test_parse_expr_falls_back_without_guessing():
-    expr = parse_expr('a + unknown(x)')
-    assert expr == RawExpr('a + unknown(x)')
-    assert emit_expr(expr) == 'a + unknown(x)'
+    expr = parse_expr('function() return 1 end')
+    assert expr == RawExpr('function() return 1 end')
+    assert emit_expr(expr) == 'function() return 1 end'
+    assert parse_expr("{key=value}") == RawExpr("{key=value}")
 
 
 def test_emit_expr_is_deterministic():
     expr = CallExpr(Attribute(Name("table"), "concat"), (Name("parts"), Literal("")))
     assert emit_expr(expr) == 'table.concat(parts, "")'
+    assert emit_expr(BinaryExpr(Name("a"), "+", BinaryExpr(Name("b"), "*", Name("c")))) == "(a + (b * c))"
+    assert emit_expr(TableExpr((Name("a"), Vararg()))) == "{a, ...}"
 
 
 def test_semantic_instruction_model_keeps_state_and_edges():
